@@ -1,0 +1,8 @@
+{
+  "name": "nm-lab-code-helper",
+  "version": "1.0.0",
+  "description": "Auto-copy Numerical Methods Lab codes via URL slug",
+  "scripts": {
+    "start": "npx serve ."
+  }
+}

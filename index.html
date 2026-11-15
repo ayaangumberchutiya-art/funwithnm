@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NM Lab Code Helper</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --text: #f8fafc;
+      --accent: #38bdf8;
+      --green: #22c55e;
+      --border: #334155;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+      padding: 24px;
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    header {
+      margin-bottom: 24px;
+      text-align: center;
+    }
+    h1 {
+      color: var(--accent);
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+    p.desc {
+      color: #94a3b8;
+      font-size: 14px;
+    }
+    .action-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(15, 23, 42, 0.98);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      text-align: center;
+      padding: 20px;
+    }
+    .status-badge {
+      font-size: 28px;
+      font-weight: bold;
+      color: var(--green);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .status-sub {
+      color: #94a3b8;
+      font-size: 16px;
+    }
+    .hidden { display: none !important; }
+
+    /* Home Dashboard styles */
+    .search-box {
+      width: 100%;
+      padding: 14px 18px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      font-size: 16px;
+      margin-bottom: 20px;
+      outline: none;
+    }
+    .search-box:focus {
+      border-color: var(--accent);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 14px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      transition: all 0.2s ease;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+    .card-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+    .card-route {
+      font-family: monospace;
+      color: #cbd5e1;
+      font-size: 13px;
+      background: #0f172a;
+      padding: 4px 8px;
+      border-radius: 4px;
+      display: inline-block;
+      margin-bottom: 10px;
+    }
+    .card-btn {
+      background: #334155;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 8px 12px;
+      font-size: 12px;
+      cursor: pointer;
+      font-weight: 500;
+      text-align: center;
+    }
+    .card-btn:hover {
+      background: var(--accent);
+      color: #0f172a;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Fullscreen Auto-Copy and Exit Overlay -->
+  <div id="overlay" class="action-overlay hidden">
+    <div class="status-badge">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 6L9 17l-5-5"></path>
+      </svg>
+      <span id="copied-slug">simpsons-13</span> Copied!
+    </div>
+    <p class="status-sub" id="closing-countdown">Closing window...</p>
+    <textarea id="hidden-clipboard-input" style="position: absolute; left: -9999px;"></textarea>
+  </div>
+
+  <div class="container" id="main-content">
+    <header>
+      <h1>Numerical Methods C++ Code Auto-Copy</h1>
+      <p class="desc">Enter <code>/&lt;keyword&gt;</code> in browser URL to auto-copy C++ code & auto-close!</p>
+    </header>
+
+    <input type="text" id="searchInput" class="search-box" placeholder="Search method or keyword (e.g. simpsons-13, trapezoidal)...">
+
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <script src="/codes.js"></script>
+  <script>
+    // Robust copy to clipboard function
+    async function copyToClipboard(text) {
+      if (navigator.clipboard && window.isSecureContext) {
+        try {
+          await navigator.clipboard.writeText(text);
+          return true;
+        } catch (e) {
+          console.warn("navigator.clipboard failed, using textarea fallback", e);
+        }
+      }
+      // Fallback
+      const ta = document.getElementById("hidden-clipboard-input");
+      ta.value = text;
+      ta.focus();
+      ta.select();
+      try {
+        const successful = document.execCommand('copy');
+        return successful;
+      } catch (err) {
+        return false;
+      }
+    }
+
+    // Attempt to close window (works on opened tabs or scripts)
+    function attemptClose() {
+      window.open('', '_self', '');
+      window.close();
+      // If browser security blocks window.close(), redirect to about:blank
+      setTimeout(() => {
+        window.location.href = "about:blank";
+      }, 500);
+    }
+
+    // Extract slug from URL path
+    function getSlug() {
+      let path = window.location.pathname.replace(/^\/+/g, '').replace(/\/+$/g, '').toLowerCase();
+      // Also check if query param ?q= was used
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('q')) {
+        path = urlParams.get('q').toLowerCase();
+      }
+      return path;
+    }
+
+    const slug = getSlug();
+    const overlay = document.getElementById("overlay");
+    const mainContent = document.getElementById("main-content");
+    const copiedSlugEl = document.getElementById("copied-slug");
+
+    if (slug && CODES[slug]) {
+      // Auto copy flow
+      mainContent.classList.add("hidden");
+      overlay.classList.remove("hidden");
+      copiedSlugEl.innerText = "/" + slug;
+
+      const code = CODES[slug];
+      copyToClipboard(code).then(() => {
+        console.log("Copied successfully!");
+      });
+
+      // Auto close after 1 second (1000ms)
+      setTimeout(() => {
+        attemptClose();
+      }, 900);
+
+    } else {
+      // Home Page: List all keywords
+      const grid = document.getElementById("grid");
+      const searchInput = document.getElementById("searchInput");
+
+      function render(filter = "") {
+        grid.innerHTML = "";
+        const keys = Object.keys(CODES);
+        const filtered = keys.filter(k => k.toLowerCase().includes(filter.toLowerCase()));
+
+        if (filtered.length === 0) {
+          grid.innerHTML = "<p style='color:#94a3b8;'>No matching keywords found.</p>";
+          return;
+        }
+
+        filtered.forEach(key => {
+          const card = document.createElement("div");
+          card.className = "card";
+          card.innerHTML = `
+            <div>
+              <div class="card-title">${key.replace(/-/g, ' ').toUpperCase()}</div>
+              <div class="card-route">/${key}</div>
+            </div>
+            <button class="card-btn">Copy & Test</button>
+          `;
+          card.onclick = () => {
+            window.location.href = "/" + key;
+          };
+          grid.appendChild(card);
+        });
+      }
+
+      render();
+      searchInput.addEventListener("input", (e) => render(e.target.value));
+    }
+  </script>
+</body>
+</html>
