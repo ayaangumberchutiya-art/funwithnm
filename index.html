@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>NM Lab Code Helper</title>
   <style>
     :root {
@@ -13,13 +13,14 @@
       --green: #22c55e;
       --border: #334155;
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     body {
       background: var(--bg);
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
-      padding: 24px;
+      padding: 20px;
       min-height: 100vh;
+      user-select: none;
     }
     .container {
       max-width: 900px;
@@ -38,31 +39,54 @@
       color: #94a3b8;
       font-size: 14px;
     }
+
+    /* Giant Fullscreen Touch/Click Area */
     .action-overlay {
       position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: #0b0f19;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      background: #060913;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      z-index: 99999;
+      z-index: 999999;
       text-align: center;
-      padding: 20px;
+      padding: 24px;
       cursor: pointer;
     }
     .status-badge {
-      font-size: 32px;
-      font-weight: bold;
-      color: var(--green);
-      margin-bottom: 12px;
+      font-size: 26px;
+      font-weight: 800;
+      color: var(--accent);
+      margin-bottom: 14px;
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
+    }
+    .status-badge.success {
+      color: var(--green);
     }
     .status-sub {
       color: #94a3b8;
+      font-size: 15px;
+      max-width: 320px;
+      line-height: 1.4;
+    }
+    .pulse-tap {
+      margin-top: 25px;
+      padding: 14px 28px;
+      background: #1e293b;
+      border: 1px solid var(--accent);
+      border-radius: 30px;
+      font-weight: 600;
+      color: #fff;
       font-size: 16px;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: scale(0.98); opacity: 0.8; }
+      50% { transform: scale(1.04); opacity: 1; }
+      100% { transform: scale(0.98); opacity: 0.8; }
     }
     .hidden { display: none !important; }
 
@@ -136,18 +160,16 @@
 </head>
 <body>
 
-  <!-- Hidden textarea for execCommand fallback -->
-  <textarea id="copy-area" style="position:fixed;top:0;left:0;width:2em;height:2em;padding:0;border:none;outline:none;box-shadow:none;background:transparent;opacity:0.01;pointer-events:none;"></textarea>
+  <!-- Hidden native input for mobile clipboard execCommand -->
+  <textarea id="native-copy" readonly style="position:fixed;top:-1000px;left:-1000px;opacity:0.001;"></textarea>
 
-  <!-- Fullscreen Auto-Copy and Exit Overlay -->
+  <!-- Fullscreen Touch Target -->
   <div id="overlay" class="action-overlay hidden">
-    <div class="status-badge">
-      <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M20 6L9 17l-5-5"></path>
-      </svg>
-      <span id="copied-slug">Code</span> Copied!
+    <div class="status-badge" id="badge-title">
+      <span id="copied-slug">Code</span>
     </div>
-    <p class="status-sub" id="status-msg">Closing in 1 sec...</p>
+    <p class="status-sub" id="status-msg">Tap anywhere to copy & close!</p>
+    <div class="pulse-tap" id="tap-btn">👆 TAP ANYWHERE</div>
   </div>
 
   <div class="container" id="main-content">
@@ -163,45 +185,46 @@
 
   <script src="/codes.js"></script>
   <script>
-    // Bulletproof Copy Function
-    function performCopy(text) {
-      return new Promise((resolve) => {
-        // Method 1: Async Clipboard API
-        if (navigator.clipboard && window.isSecureContext) {
-          navigator.clipboard.writeText(text).then(() => {
-            resolve(true);
-            return;
-          }).catch(() => {
-            // If failed, use fallback
-            useFallback();
-          });
-        } else {
-          useFallback();
-        }
-
-        function useFallback() {
-          try {
-            const ta = document.getElementById("copy-area");
-            ta.value = text;
-            ta.focus();
-            ta.select();
-            ta.setSelectionRange(0, 999999);
-            const successful = document.execCommand('copy');
-            resolve(successful);
-          } catch (err) {
-            console.error("Copy failed", err);
-            resolve(false);
-          }
-        }
-      });
+    function triggerVibrate() {
+      if (navigator.vibrate) {
+        navigator.vibrate(60);
+      }
     }
 
-    function attemptExit() {
+    // High compatibility copy function for iOS & Android
+    async function doCopy(text) {
+      let copied = false;
+
+      // 1. Try modern clipboard API
+      if (navigator.clipboard && window.isSecureContext) {
+        try {
+          await navigator.clipboard.writeText(text);
+          copied = true;
+        } catch (e) {}
+      }
+
+      // 2. Fallback to execCommand (works 100% on mobile user gesture)
+      if (!copied) {
+        try {
+          const ta = document.getElementById("native-copy");
+          ta.value = text;
+          ta.removeAttribute('readonly');
+          ta.select();
+          ta.setSelectionRange(0, 999999);
+          copied = document.execCommand('copy');
+          ta.setAttribute('readonly', true);
+        } catch (err) {}
+      }
+
+      return copied;
+    }
+
+    function exitNow() {
       try {
         window.open('', '_self', '');
         window.close();
       } catch (e) {}
-      window.location.href = "about:blank";
+      window.location.replace("about:blank");
     }
 
     function getSlug() {
@@ -217,7 +240,9 @@
     const overlay = document.getElementById("overlay");
     const mainContent = document.getElementById("main-content");
     const copiedSlugEl = document.getElementById("copied-slug");
+    const badgeTitle = document.getElementById("badge-title");
     const statusMsg = document.getElementById("status-msg");
+    const tapBtn = document.getElementById("tap-btn");
 
     if (slug && CODES[slug]) {
       mainContent.classList.add("hidden");
@@ -226,29 +251,35 @@
 
       const code = CODES[slug];
 
-      // Try copy immediately
-      performCopy(code).then((success) => {
-        if (success) {
-          statusMsg.innerText = "Copied! Redirecting to blank...";
-        } else {
-          statusMsg.innerText = "Click anywhere once to finish copy!";
+      // Step A: Background silent copy attempt (Works instantly on PC/Chrome)
+      doCopy(code).then((ok) => {
+        if (ok) {
+          triggerVibrate();
+          badgeTitle.classList.add("success");
+          badgeTitle.innerHTML = "✅ Copied!";
+          statusMsg.innerText = "Closing...";
+          tapBtn.style.display = "none";
+          setTimeout(exitNow, 700);
         }
-        // Wait enough so clipboard buffer is safely flushed before leaving
-        setTimeout(() => {
-          attemptExit();
-        }, 900);
       });
 
-      // Extra insurance: If user clicks or taps anywhere on screen, copy instantly triggers
-      window.addEventListener('click', () => {
-        performCopy(code);
-        setTimeout(attemptExit, 400);
-      }, { once: true });
+      // Step B: Mobile User Gesture (1-Tap anywhere on screen)
+      let handled = false;
+      function handleUserTap() {
+        if (handled) return;
+        handled = true;
+        doCopy(code).then(() => {
+          triggerVibrate();
+          badgeTitle.classList.add("success");
+          badgeTitle.innerHTML = "✅ Copied!";
+          statusMsg.innerText = "Closing...";
+          tapBtn.style.display = "none";
+          setTimeout(exitNow, 500);
+        });
+      }
 
-      window.addEventListener('keydown', () => {
-        performCopy(code);
-        setTimeout(attemptExit, 400);
-      }, { once: true });
+      overlay.addEventListener('touchstart', handleUserTap, { passive: true });
+      overlay.addEventListener('click', handleUserTap);
 
     } else {
       // Home Page
