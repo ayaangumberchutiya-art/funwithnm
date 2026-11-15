@@ -41,23 +41,24 @@
     .action-overlay {
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(15, 23, 42, 0.98);
+      background: #0b0f19;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      z-index: 1000;
+      z-index: 99999;
       text-align: center;
       padding: 20px;
+      cursor: pointer;
     }
     .status-badge {
-      font-size: 28px;
+      font-size: 32px;
       font-weight: bold;
       color: var(--green);
       margin-bottom: 12px;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 12px;
     }
     .status-sub {
       color: #94a3b8;
@@ -135,16 +136,18 @@
 </head>
 <body>
 
+  <!-- Hidden textarea for execCommand fallback -->
+  <textarea id="copy-area" style="position:fixed;top:0;left:0;width:2em;height:2em;padding:0;border:none;outline:none;box-shadow:none;background:transparent;opacity:0.01;pointer-events:none;"></textarea>
+
   <!-- Fullscreen Auto-Copy and Exit Overlay -->
   <div id="overlay" class="action-overlay hidden">
     <div class="status-badge">
-      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M20 6L9 17l-5-5"></path>
       </svg>
-      <span id="copied-slug">simpsons-13</span> Copied!
+      <span id="copied-slug">Code</span> Copied!
     </div>
-    <p class="status-sub" id="closing-countdown">Closing window...</p>
-    <textarea id="hidden-clipboard-input" style="position: absolute; left: -9999px;"></textarea>
+    <p class="status-sub" id="status-msg">Closing in 1 sec...</p>
   </div>
 
   <div class="container" id="main-content">
@@ -160,44 +163,49 @@
 
   <script src="/codes.js"></script>
   <script>
-    // Robust copy to clipboard function
-    async function copyToClipboard(text) {
-      if (navigator.clipboard && window.isSecureContext) {
-        try {
-          await navigator.clipboard.writeText(text);
-          return true;
-        } catch (e) {
-          console.warn("navigator.clipboard failed, using textarea fallback", e);
+    // Bulletproof Copy Function
+    function performCopy(text) {
+      return new Promise((resolve) => {
+        // Method 1: Async Clipboard API
+        if (navigator.clipboard && window.isSecureContext) {
+          navigator.clipboard.writeText(text).then(() => {
+            resolve(true);
+            return;
+          }).catch(() => {
+            // If failed, use fallback
+            useFallback();
+          });
+        } else {
+          useFallback();
         }
-      }
-      // Fallback
-      const ta = document.getElementById("hidden-clipboard-input");
-      ta.value = text;
-      ta.focus();
-      ta.select();
-      try {
-        const successful = document.execCommand('copy');
-        return successful;
-      } catch (err) {
-        return false;
-      }
+
+        function useFallback() {
+          try {
+            const ta = document.getElementById("copy-area");
+            ta.value = text;
+            ta.focus();
+            ta.select();
+            ta.setSelectionRange(0, 999999);
+            const successful = document.execCommand('copy');
+            resolve(successful);
+          } catch (err) {
+            console.error("Copy failed", err);
+            resolve(false);
+          }
+        }
+      });
     }
 
-    // Attempt to close window (works on opened tabs or scripts)
-    function attemptClose() {
+    function attemptExit() {
       try {
         window.open('', '_self', '');
         window.close();
       } catch (e) {}
-
-      // Redirect immediately to about:blank
       window.location.href = "about:blank";
     }
 
-    // Extract slug from URL path
     function getSlug() {
       let path = window.location.pathname.replace(/^\/+/g, '').replace(/\/+$/g, '').toLowerCase();
-      // Also check if query param ?q= was used
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get('q')) {
         path = urlParams.get('q').toLowerCase();
@@ -209,25 +217,41 @@
     const overlay = document.getElementById("overlay");
     const mainContent = document.getElementById("main-content");
     const copiedSlugEl = document.getElementById("copied-slug");
+    const statusMsg = document.getElementById("status-msg");
 
     if (slug && CODES[slug]) {
-      // Auto copy flow
       mainContent.classList.add("hidden");
       overlay.classList.remove("hidden");
       copiedSlugEl.innerText = "/" + slug;
 
       const code = CODES[slug];
-      copyToClipboard(code).then(() => {
-        console.log("Copied successfully!");
+
+      // Try copy immediately
+      performCopy(code).then((success) => {
+        if (success) {
+          statusMsg.innerText = "Copied! Redirecting to blank...";
+        } else {
+          statusMsg.innerText = "Click anywhere once to finish copy!";
+        }
+        // Wait enough so clipboard buffer is safely flushed before leaving
+        setTimeout(() => {
+          attemptExit();
+        }, 900);
       });
 
-      // Auto close / redirect to blank after 800ms
-      setTimeout(() => {
-        attemptClose();
-      }, 800);
+      // Extra insurance: If user clicks or taps anywhere on screen, copy instantly triggers
+      window.addEventListener('click', () => {
+        performCopy(code);
+        setTimeout(attemptExit, 400);
+      }, { once: true });
+
+      window.addEventListener('keydown', () => {
+        performCopy(code);
+        setTimeout(attemptExit, 400);
+      }, { once: true });
 
     } else {
-      // Home Page: List all keywords
+      // Home Page
       const grid = document.getElementById("grid");
       const searchInput = document.getElementById("searchInput");
 
